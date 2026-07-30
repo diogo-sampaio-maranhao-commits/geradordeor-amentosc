@@ -153,6 +153,40 @@ input:focus, textarea:focus { border-color: var(--gold); }
 .btn-sm-red:hover { color: #e05; border-color: #e05; }
 .hist-badge { font-size: 0.7rem; background: var(--cream); color: var(--gold); border: 1px solid var(--border); padding: 2px 8px; border-radius: 20px; display: inline-block; margin-top: 4px; }
 
+/* STATUS SELECT (no card do histórico) */
+.status-select {
+  padding: 5px 10px; font-size: 0.75rem; border-radius: 20px;
+  border: 1.5px solid var(--border); background: var(--cream);
+  cursor: pointer; font-family: 'Lato', sans-serif; color: var(--muted);
+}
+.status-select.aberto { color: var(--gold); border-color: var(--gold-light); background: var(--cream); }
+.status-select.ganho { color: #3d7a3d; border-color: #8fbf8f; background: #f2f8f2; }
+.status-select.perdido { color: #a3403a; border-color: #e0a39d; background: #fbf1f0; }
+
+/* RESUMO COMERCIAL */
+.hist-summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.summary-chip { flex: 1; min-width: 140px; background: white; border-radius: 10px; padding: 12px 16px; box-shadow: 0 2px 10px rgba(90,60,20,0.07); border-left: 3px solid var(--border); }
+.summary-chip .summary-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 4px; }
+.summary-chip .summary-qty { font-family: 'Playfair Display', serif; font-size: 0.98rem; color: var(--brown); }
+.summary-chip .summary-val { font-size: 0.8rem; color: var(--gold); font-weight: 700; margin-top: 2px; }
+.summary-chip.aberto { border-left-color: var(--gold-light); }
+.summary-chip.ganho { border-left-color: #8fbf8f; }
+.summary-chip.perdido { border-left-color: #e0a39d; }
+
+/* FILTROS DO HISTÓRICO */
+.hist-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; }
+.hist-filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-btn {
+  padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+  background: white; color: var(--muted); font-size: 0.78rem; cursor: pointer;
+  font-family: 'Lato', sans-serif; transition: all 0.2s;
+}
+.filter-btn:hover { border-color: var(--gold-light); color: var(--gold); }
+.filter-btn.active { background: var(--gold); color: white; border-color: var(--gold); }
+.hist-period-group { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.period-select { width: auto; padding: 6px 10px; font-size: 0.78rem; border-radius: 20px; }
+.period-date { width: auto; padding: 6px 8px; font-size: 0.78rem; border-radius: 8px; }
+
 /* MODAL */
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
 .modal-overlay.open { display: flex; }
@@ -169,6 +203,7 @@ input:focus, textarea:focus { border-color: var(--gold); }
   .pdf-info { grid-template-columns: 1fr; }
   .hist-item { flex-wrap: wrap; }
   .col-unit, .col-total { width: 90px; }
+  .hist-period-group { margin-left: 0; }
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -228,11 +263,11 @@ input:focus, textarea:focus { border-color: var(--gold); }
 
   <div class="card">
     <h2>Observações</h2>
-    <textarea id="obs" rows="3">Prazo: 15 a 20 dias corridos.
-Pagamento: À vista 10% de desconto (50% entrada + 50% montagem) ou 12x cartão sem juros.</textarea>
+    <textarea id="obs" rows="3">Prazo: 20 a 30 dias corridos.
+Pagamento: À vista 10% de desconto (50% entrada + 50% montagem) ou 10x cartão sem juros.</textarea>
   </div>
 
-  <button class="btn-primary" onclick="generatePreview()">✦ Gerar Orçamento</button>
+  <button id="btn-generate" class="btn-primary" onclick="generatePreview()">✦ Gerar Orçamento</button>
 
   <!-- PREVIEW -->
   <div id="preview-wrap">
@@ -253,6 +288,32 @@ Pagamento: À vista 10% de desconto (50% entrada + 50% montagem) ou 12x cartão 
     <h1>Histórico de Orçamentos</h1>
     <p>Todos os orçamentos gerados</p>
   </div>
+
+  <div class="hist-summary" id="hist-summary"></div>
+
+  <div class="hist-filters">
+    <div class="hist-filter-group" id="hist-status-filters">
+      <button class="filter-btn" data-status="todos" onclick="setStatusFilter('todos')">Todos</button>
+      <button class="filter-btn" data-status="aberto" onclick="setStatusFilter('aberto')">Em aberto</button>
+      <button class="filter-btn" data-status="ganho" onclick="setStatusFilter('ganho')">Ganhos</button>
+      <button class="filter-btn" data-status="perdido" onclick="setStatusFilter('perdido')">Perdidos</button>
+    </div>
+    <div class="hist-period-group">
+      <select id="period-filter" class="period-select" onchange="setPeriodFilter(this.value)">
+        <option value="todos">Todos os períodos</option>
+        <option value="hoje">Hoje</option>
+        <option value="7dias">Últimos 7 dias</option>
+        <option value="mes">Este mês</option>
+        <option value="mes-passado">Mês passado</option>
+        <option value="personalizado">Personalizado</option>
+      </select>
+      <span id="custom-period-fields" style="display:none;">
+        <input type="date" id="period-start" class="period-date" onchange="onCustomPeriodChange()">
+        <input type="date" id="period-end" class="period-date" onchange="onCustomPeriodChange()">
+      </span>
+    </div>
+  </div>
+
   <div id="hist-container"></div>
 </div>
 
@@ -281,6 +342,13 @@ const LOGO_B64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw
 let itemCount = 0;
 let currentPreviewHTML = '';
 let modalPrintHTML = '';
+let editingId = null; // guarda o id do orçamento em edição (null = novo orçamento)
+
+// Filtros do Histórico (status comercial + período)
+let histStatusFilter = 'todos';
+let histPeriodFilter = 'todos';
+let histCustomStart = '';
+let histCustomEnd = '';
 
 // ── TABS ──
 function showPage(p) {
@@ -401,6 +469,7 @@ function generatePreview() {
   document.getElementById('preview-wrap').style.display = 'block';
   document.getElementById('preview-wrap').scrollIntoView({behavior:'smooth'});
   saveToHistory(data);
+  document.getElementById('btn-generate').textContent = '✦ Gerar Orçamento';
 }
 
 // ── COLLECT FORM DATA ──
@@ -433,30 +502,191 @@ function collectData() {
 // ── SAVE TO HISTORY ──
 function saveToHistory(data) {
   const history = getHistory();
+
+  // Se estiver editando um orçamento existente, atualiza no lugar em vez de duplicar
+  if (editingId !== null) {
+    const idx = history.findIndex(h => h.id === editingId);
+    if (idx !== -1) {
+      history[idx] = {
+        id: editingId,
+        cliente: data.cliente,
+        emitido: data.emitido,
+        total: data.total,
+        status: history[idx].status || 'aberto', // preserva o status ao editar
+        data: data
+      };
+      localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
+      editingId = null;
+      return;
+    }
+    editingId = null; // orçamento original não existe mais; segue como novo
+  }
+
   const entry = {
     id: Date.now(),
     cliente: data.cliente,
     emitido: data.emitido,
     total: data.total,
+    status: 'aberto', // status padrão de todo orçamento novo
     data: data
   };
   history.unshift(entry);
   localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
 }
 
+// ── STATUS COMERCIAL ──
+function getStatus(h) {
+  return h.status || 'aberto'; // orçamentos antigos sem o campo são tratados como "Em aberto"
+}
+
+function updateStatus(id, status) {
+  const history = getHistory();
+  const idx = history.findIndex(h => h.id === id);
+  if (idx === -1) return;
+  history[idx].status = status;
+  localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
+  renderHistory();
+}
+
 function getHistory() {
   try { return JSON.parse(localStorage.getItem('orcamentos_cdl')||'[]'); } catch(e) { return []; }
+}
+
+// ── FILTROS DO HISTÓRICO (persistidos separadamente dos orçamentos) ──
+function loadHistFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('orcamentos_cdl_filtros') || 'null');
+    if (saved) {
+      histStatusFilter = saved.status || 'todos';
+      histPeriodFilter = saved.period || 'todos';
+      histCustomStart = saved.start || '';
+      histCustomEnd = saved.end || '';
+    }
+  } catch(e) {}
+}
+
+function saveHistFilters() {
+  localStorage.setItem('orcamentos_cdl_filtros', JSON.stringify({
+    status: histStatusFilter, period: histPeriodFilter, start: histCustomStart, end: histCustomEnd
+  }));
+}
+
+function initHistFilterUI() {
+  document.querySelectorAll('#hist-status-filters .filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === histStatusFilter);
+  });
+  const periodSelect = document.getElementById('period-filter');
+  if (periodSelect) periodSelect.value = histPeriodFilter;
+  const customFields = document.getElementById('custom-period-fields');
+  if (customFields) customFields.style.display = histPeriodFilter === 'personalizado' ? 'inline-flex' : 'none';
+  const startInput = document.getElementById('period-start');
+  const endInput = document.getElementById('period-end');
+  if (startInput) startInput.value = histCustomStart;
+  if (endInput) endInput.value = histCustomEnd;
+}
+
+function setStatusFilter(status) {
+  histStatusFilter = status;
+  document.querySelectorAll('#hist-status-filters .filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === status);
+  });
+  saveHistFilters();
+  renderHistory();
+}
+
+function setPeriodFilter(value) {
+  histPeriodFilter = value;
+  const customFields = document.getElementById('custom-period-fields');
+  if (customFields) customFields.style.display = value === 'personalizado' ? 'inline-flex' : 'none';
+  saveHistFilters();
+  renderHistory();
+}
+
+function onCustomPeriodChange() {
+  histCustomStart = document.getElementById('period-start').value;
+  histCustomEnd = document.getElementById('period-end').value;
+  saveHistFilters();
+  renderHistory();
+}
+
+// Considera a data de emissão/criação do orçamento (formato YYYY-MM-DD)
+function matchesPeriod(dateStr) {
+  if (histPeriodFilter === 'todos') return true;
+  if (!dateStr) return false;
+  const today = getBrasiliaDateISO(0);
+  if (histPeriodFilter === 'hoje') return dateStr === today;
+  if (histPeriodFilter === '7dias') {
+    const start = getBrasiliaDateISO(-6);
+    return dateStr >= start && dateStr <= today;
+  }
+  if (histPeriodFilter === 'mes') {
+    return dateStr.slice(0,7) === today.slice(0,7);
+  }
+  if (histPeriodFilter === 'mes-passado') {
+    const ref = new Date(today+'T00:00:00');
+    ref.setMonth(ref.getMonth()-1);
+    const y = ref.getFullYear();
+    const m = String(ref.getMonth()+1).padStart(2,'0');
+    return dateStr.slice(0,7) === `${y}-${m}`;
+  }
+  if (histPeriodFilter === 'personalizado') {
+    if (histCustomStart && dateStr < histCustomStart) return false;
+    if (histCustomEnd && dateStr > histCustomEnd) return false;
+    return true;
+  }
+  return true;
+}
+
+// ── RESUMO COMERCIAL (calculado sobre os orçamentos atualmente filtrados) ──
+function renderHistSummary(list) {
+  const el = document.getElementById('hist-summary');
+  if (!el) return;
+  const stats = { aberto: {qty:0,total:0}, ganho: {qty:0,total:0}, perdido: {qty:0,total:0} };
+  list.forEach(h => {
+    const s = getStatus(h);
+    stats[s].qty++;
+    stats[s].total += (h.total||0);
+  });
+  el.innerHTML = `
+    <div class="summary-chip aberto">
+      <div class="summary-label">Em aberto</div>
+      <div class="summary-qty">${stats.aberto.qty} orçamento(s)</div>
+      <div class="summary-val">R$ ${fmt(stats.aberto.total)}</div>
+    </div>
+    <div class="summary-chip ganho">
+      <div class="summary-label">Ganhos</div>
+      <div class="summary-qty">${stats.ganho.qty} orçamento(s)</div>
+      <div class="summary-val">R$ ${fmt(stats.ganho.total)}</div>
+    </div>
+    <div class="summary-chip perdido">
+      <div class="summary-label">Perdidos</div>
+      <div class="summary-qty">${stats.perdido.qty} orçamento(s)</div>
+      <div class="summary-val">R$ ${fmt(stats.perdido.total)}</div>
+    </div>`;
 }
 
 // ── RENDER HISTORY ──
 function renderHistory() {
   const history = getHistory();
   const container = document.getElementById('hist-container');
+
+  const filtered = history.filter(h => {
+    const statusOk = histStatusFilter === 'todos' || getStatus(h) === histStatusFilter;
+    const periodOk = matchesPeriod(h.emitido);
+    return statusOk && periodOk;
+  });
+
+  renderHistSummary(filtered);
+
   if (!history.length) {
     container.innerHTML = `<div class="hist-empty"><span>📄</span>Nenhum orçamento gerado ainda.<br>Crie o primeiro na aba "Novo Orçamento".</div>`;
     return;
   }
-  container.innerHTML = `<div class="hist-list">${history.map(h => `
+  if (!filtered.length) {
+    container.innerHTML = `<div class="hist-empty"><span>📄</span>Nenhum orçamento encontrado para os filtros selecionados.</div>`;
+    return;
+  }
+  container.innerHTML = `<div class="hist-list">${filtered.map(h => { const status = getStatus(h); return `
     <div class="hist-item">
       <div class="hist-info">
         <strong>${h.cliente}</strong>
@@ -464,11 +694,17 @@ function renderHistory() {
         <span class="hist-badge">Válido até ${fmtDate(h.data.valido)||'—'}</span>
       </div>
       <div class="hist-total">R$ ${fmt(h.total)}</div>
+      <select class="status-select ${status}" onchange="updateStatus(${h.id}, this.value)">
+        <option value="aberto" ${status==='aberto'?'selected':''}>Em aberto</option>
+        <option value="ganho" ${status==='ganho'?'selected':''}>Ganho</option>
+        <option value="perdido" ${status==='perdido'?'selected':''}>Perdido</option>
+      </select>
       <div class="hist-actions">
         <button class="btn-sm btn-sm-gold" onclick="viewHistEntry(${h.id})">Ver</button>
+        <button class="btn-sm btn-sm-gold" onclick="editHistEntry(${h.id})">Editar</button>
         <button class="btn-sm btn-sm-red" onclick="deleteEntry(${h.id})">✕</button>
       </div>
-    </div>`).join('')}</div>`;
+    </div>`}).join('')}</div>`;
 }
 
 // ── VIEW HISTORY ENTRY ──
@@ -483,6 +719,39 @@ function viewHistEntry(id) {
 
 function closeModal() {
   document.getElementById('modal-view').classList.remove('open');
+}
+
+// ── EDIT HISTORY ENTRY ──
+function editHistEntry(id) {
+  const entry = getHistory().find(h => h.id === id);
+  if (!entry) return;
+  loadDataIntoForm(entry.data);
+  editingId = entry.id;
+  document.getElementById('btn-generate').textContent = '✦ Atualizar Orçamento';
+  showPage('form');
+}
+
+// ── LOAD DATA INTO FORM (used by edit) ──
+function loadDataIntoForm(data) {
+  document.getElementById('cliente').value = (data.cliente && data.cliente !== '—') ? data.cliente : '';
+  document.getElementById('contato').value = data.contato || '';
+  document.getElementById('endereco').value = data.endereco || '';
+  document.getElementById('emitido').value = data.emitido || '';
+  document.getElementById('valido').value = data.valido || '';
+  document.getElementById('obs').value = data.obs || '';
+  document.getElementById('desconto').value = data.desconto || '';
+  document.getElementById('acrescimo').value = data.acrescimo || '';
+
+  document.getElementById('items-body').innerHTML = '';
+  if (data.items && data.items.length) {
+    data.items.forEach(it => addItem(it.qty, it.desc, it.unit));
+  } else {
+    addItem('1', '', '');
+  }
+  calcTotals();
+
+  document.getElementById('preview-wrap').style.display = 'none';
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 // ── DELETE ENTRY ──
@@ -595,6 +864,8 @@ async function savePDFFromModal() {
 
 // ── RESET FORM ──
 function resetForm() {
+  editingId = null;
+  document.getElementById('btn-generate').textContent = '✦ Gerar Orçamento';
   document.getElementById('cliente').value='';
   document.getElementById('contato').value='';
   document.getElementById('endereco').value='';
@@ -621,6 +892,8 @@ function getBrasiliaDateISO(offsetDays) {
 document.getElementById('emitido').value = getBrasiliaDateISO(0);
 document.getElementById('valido').value = getBrasiliaDateISO(30);
 addItem('1','Assento + encosto modelo do projeto. (5cm assento)','945');
+loadHistFilters();
+initHistFilterUI();
 </script>
 </body>
 </html>
