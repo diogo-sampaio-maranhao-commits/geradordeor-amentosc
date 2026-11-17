@@ -371,9 +371,9 @@ function addItem(qty='1', desc='', unit='') {
   const tr = document.createElement('tr');
   tr.id = 'item-' + id;
   tr.innerHTML = `
-    <td class="col-qty"><input type="number" min="1" value="${qty}" oninput="calcItem(${id}); calcTotals()"></td>
-    <td><input type="text" value="${desc}" placeholder="Descrição do produto/serviço"></td>
-    <td class="col-unit"><input type="number" min="0" step="0.01" value="${unit}" placeholder="0,00" oninput="calcItem(${id}); calcTotals()"></td>
+    <td class="col-qty"><input type="number" min="1" value="${escapeHTML(qty)}" oninput="calcItem(${id}); calcTotals()"></td>
+    <td><input type="text" value="${escapeHTML(desc)}" placeholder="Descrição do produto/serviço"></td>
+    <td class="col-unit"><input type="number" min="0" step="0.01" value="${escapeHTML(unit)}" placeholder="0,00" oninput="calcItem(${id}); calcTotals()"></td>
     <td class="col-total"><input type="number" readonly id="total-${id}" placeholder="0,00" style="background:#f7f0e8;color:var(--gold);font-weight:700;"></td>
     <td class="col-del"><button class="btn-del" onclick="removeItem(${id})">✕</button></td>`;
   document.getElementById('items-body').appendChild(tr);
@@ -402,7 +402,7 @@ function calcTotals() {
 
 // ── FORMAT ──
 function fmt(n) { return parseFloat(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function fmtDate(d) { if (!d) return ''; const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; }
+function fmtDate(d) { if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return ''; const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; }
 
 // ── BUILD PDF HTML ──
 function escapeHTML(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

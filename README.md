@@ -4,7 +4,7 @@ The production entry point is `index.html`. The previous duplicate HTML pages ar
 
 ## Shared history
 
-The browser calls `/api/cloud`. Vercel validates the team password and issues a signed, HttpOnly, Secure, SameSite session cookie lasting 30 days. Passwords and session secrets are environment variables, never frontend code. The server forwards authorized operations to the `budget-store` Supabase Edge Function with a separate private token. That function uses its built-in server service key; direct database access by anon/authenticated roles is revoked and RLS is enabled. Login attempts are limited to 20 per IP per 15 minutes by a database function.
+The browser calls `/api/cloud`. Vercel validates the team password and issues a signed, HttpOnly, Secure, SameSite session cookie lasting 30 days. Passwords and session secrets are environment variables, never frontend code. The server forwards authorized operations to the `budget-store` Supabase Edge Function with a separate private token. That function uses its built-in server service key; direct database access by anon/authenticated roles is revoked and RLS is enabled. Login attempts are limited to 15 per IP per 15 minutes by a database function.
 
 Vercel environment variables: `APP_PASSWORD`, `SESSION_SECRET`, `STORE_TOKEN`, `STORE_URL`. To change the shared password, update `APP_PASSWORD`, rotate `SESSION_SECRET` to invalidate existing sessions, and redeploy. The edge source stores only SHA-256 of the random `STORE_TOKEN`; rotate both sides together.
 
