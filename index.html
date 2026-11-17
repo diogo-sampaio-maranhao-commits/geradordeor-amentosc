@@ -210,6 +210,10 @@ input:focus, textarea:focus { border-color: var(--gold); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
+<div id="auth-gate" class="card" style="max-width:420px;margin:12vh auto">
+<h2>Cabeceiras de Luxo</h2><p style="margin-bottom:18px">Entre com a senha da equipe para acessar os orçamentos.</p>
+<form onsubmit="login(event)"><label for="team-password">Senha</label><input id="team-password" type="password" autocomplete="current-password" required><button class="btn-primary" id="login-btn">Entrar</button><p id="auth-error" role="alert" style="margin-top:12px"></p></form></div>
+<div id="app" style="display:none"><div style="max-width:860px;margin:0 auto 16px;display:flex;justify-content:space-between"><span id="cloud-status" role="status">Conectando ao histórico…</span><button class="btn-outline" onclick="logout()">Sair</button></div>
 
 <!-- TABS -->
 <div class="nav-tabs">
@@ -332,6 +336,7 @@ Pagamento: À vista 10% de desconto (50% entrada + 50% montagem) ou 10x cartão 
   </div>
 </div>
 
+</div>
 <!-- PRINT AREA -->
 <div id="print-only"></div>
 <div id="pdf-render" style="position:fixed;left:-9999px;top:0;width:794px;background:white;padding:40px;font-family:Lato,sans-serif;color:#3a2a1a;z-index:-1;"></div>
@@ -356,7 +361,7 @@ function showPage(p) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('page-' + p).classList.add('active');
   document.querySelectorAll('.tab-btn')[p === 'form' ? 0 : 1].classList.add('active');
-  if (p === 'hist') renderHistory();
+  if (p === 'hist') refreshHistory();
 }
 
 // ── ITEMS ──
@@ -400,7 +405,9 @@ function fmt(n) { return parseFloat(n||0).toLocaleString('pt-BR',{minimumFractio
 function fmtDate(d) { if (!d) return ''; const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; }
 
 // ── BUILD PDF HTML ──
+function escapeHTML(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function buildPDFHTML(data) {
+  data={...data,cliente:escapeHTML(data.cliente),contato:escapeHTML(data.contato),endereco:escapeHTML(data.endereco),obs:escapeHTML(data.obs),items:data.items.map(i=>({...i,desc:escapeHTML(i.desc)}))};
   const logoImg = `<img src="data:image/jpeg;base64,${LOGO_B64}" style="width:90px;height:90px;object-fit:cover;border-radius:12px;">`;
   let itemsHTML = '';
   data.items.forEach(it => {
@@ -461,15 +468,20 @@ function buildPDFHTML(data) {
 }
 
 // ── GENERATE PREVIEW ──
-function generatePreview() {
+async function generatePreview() {
+  if (!document.getElementById('cliente').value.trim()) { alert('Preencha o nome do cliente!'); return; }
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true; btn.textContent = 'Salvando…';
   const data = collectData();
-  if (!data.cliente) { alert('Preencha o nome do cliente!'); return; }
-  currentPreviewHTML = buildPDFHTML(data);
-  document.getElementById('preview-content').innerHTML = currentPreviewHTML;
-  document.getElementById('preview-wrap').style.display = 'block';
-  document.getElementById('preview-wrap').scrollIntoView({behavior:'smooth'});
-  saveToHistory(data);
-  document.getElementById('btn-generate').textContent = '✦ Gerar Orçamento';
+  try {
+    await saveToHistory(data);
+    currentPreviewHTML = buildPDFHTML(data);
+    document.getElementById('preview-content').innerHTML = currentPreviewHTML;
+    document.getElementById('preview-wrap').style.display = 'block';
+    document.getElementById('preview-wrap').scrollIntoView({behavior:'smooth'});
+    cloudStatus('Salvo na nuvem ✓');
+  } catch(e) { cloudStatus('Não salvo — tente novamente'); alert(e.message); }
+  finally { btn.disabled = false; btn.textContent = editingId === null ? '✦ Gerar Orçamento' : '✦ Atualizar Orçamento'; }
 }
 
 // ── COLLECT FORM DATA ──
@@ -500,56 +512,53 @@ function collectData() {
 }
 
 // ── SAVE TO HISTORY ──
-function saveToHistory(data) {
-  const history = getHistory();
-
-  // Se estiver editando um orçamento existente, atualiza no lugar em vez de duplicar
-  if (editingId !== null) {
-    const idx = history.findIndex(h => h.id === editingId);
-    if (idx !== -1) {
-      history[idx] = {
-        id: editingId,
-        cliente: data.cliente,
-        emitido: data.emitido,
-        total: data.total,
-        status: history[idx].status || 'aberto', // preserva o status ao editar
-        data: data
-      };
-      localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
-      editingId = null;
-      return;
-    }
-    editingId = null; // orçamento original não existe mais; segue como novo
-  }
-
-  const entry = {
-    id: Date.now(),
-    cliente: data.cliente,
-    emitido: data.emitido,
-    total: data.total,
-    status: 'aberto', // status padrão de todo orçamento novo
-    data: data
-  };
-  history.unshift(entry);
-  localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
+let historyCache = [];
+let pendingEntryId = null;
+function cloudStatus(text) { document.getElementById('cloud-status').textContent = text; }
+async function api(method='GET', body) {
+ const r = await fetch('/api/cloud', {method,headers:{'Content-Type':'application/json'},body:body ? JSON.stringify(body) : undefined});
+ const result = await r.json();
+ if(r.status === 401) {document.getElementById('app').style.display='none';document.getElementById('auth-gate').style.display='block';}
+ if(!r.ok) throw new Error(result.error || 'Falha na conexão. Tente novamente.');
+ return result;
 }
-
-// ── STATUS COMERCIAL ──
-function getStatus(h) {
-  return h.status || 'aberto'; // orçamentos antigos sem o campo são tratados como "Em aberto"
+async function login(event) {
+ event.preventDefault(); const btn=document.getElementById('login-btn');btn.disabled=true;
+ try {await api('POST',{action:'login',password:document.getElementById('team-password').value});document.getElementById('team-password').value='';await enterApp();}
+ catch(e){document.getElementById('auth-error').textContent=e.message;}finally{btn.disabled=false;}
 }
-
-function updateStatus(id, status) {
-  const history = getHistory();
-  const idx = history.findIndex(h => h.id === id);
-  if (idx === -1) return;
-  history[idx].status = status;
-  localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
-  renderHistory();
+async function enterApp() {
+ document.getElementById('auth-gate').style.display='none';document.getElementById('app').style.display='block';
+ await refreshHistory(); renderMigration();
 }
-
-function getHistory() {
-  try { return JSON.parse(localStorage.getItem('orcamentos_cdl')||'[]'); } catch(e) { return []; }
+async function logout(){try{await api('POST',{action:'logout'});location.reload();}catch(e){alert(e.message);}}
+async function refreshHistory() {
+ try {const r=await api();historyCache=r.rows.map(h=>({...h,total:Number(h.total)}));renderHistory();cloudStatus('Histórico atualizado ✓');}
+ catch(e){cloudStatus('Falha ao atualizar o histórico'); document.getElementById('hist-container').innerHTML='<p>Não foi possível carregar o histórico. <button class="btn-outline" onclick="refreshHistory()">Tentar novamente</button></p>';}
+}
+async function saveToHistory(data) {
+ const editing=editingId !== null;
+ if(!editing && pendingEntryId === null) pendingEntryId=Date.now()*1000+Math.floor(Math.random()*1000);
+ const entry={id:editingId ?? pendingEntryId,cliente:data.cliente,emitido:data.emitido,total:data.total,status:'aberto',data};
+ // Retry an uncertain insert by checking whether that exact id was already saved.
+ if(!editing){const r=await api();const saved=r.rows.find(h=>h.id===entry.id);if(saved){await api('POST',{entry,editing:true});}else{await api('POST',{entry});}}
+ else await api('POST',{entry,editing:true});
+ editingId=null;pendingEntryId=null;await refreshHistory();
+}
+function getStatus(h){return ['aberto','ganho','perdido'].includes(h.status)?h.status:'aberto';}
+function getHistory(){return historyCache;}
+async function updateStatus(id,status){try{await api('PATCH',{id,status});await refreshHistory();}catch(e){renderHistory();alert(e.message);}}
+function renderMigration(){
+ let legacy=[];try{legacy=JSON.parse(localStorage.getItem('orcamentos_cdl')||'[]');}catch{}
+ if(!Array.isArray(legacy)||!legacy.length)return;
+ const el=document.createElement('div');el.id='migration-banner';el.className='card';
+ el.innerHTML='<p>Há '+legacy.length+' orçamento(s) neste navegador. Importe para acessar em outros dispositivos.</p><button class="btn-outline" onclick="migrateLegacy()">Importar orçamentos antigos</button>';
+ document.getElementById('page-hist').prepend(el);
+}
+async function migrateLegacy(){
+ const btn=document.querySelector('#migration-banner button');btn.disabled=true;
+ try{const legacy=JSON.parse(localStorage.getItem('orcamentos_cdl')||'[]');for(let i=0;i<legacy.length;i+=100)await api('POST',{action:'import',rows:legacy.slice(i,i+100)});await refreshHistory();document.getElementById('migration-banner').textContent='Orçamentos importados para a nuvem ✓';}
+ catch(e){alert(e.message);btn.disabled=false;}
 }
 
 // ── FILTROS DO HISTÓRICO (persistidos separadamente dos orçamentos) ──
@@ -689,7 +698,7 @@ function renderHistory() {
   container.innerHTML = `<div class="hist-list">${filtered.map(h => { const status = getStatus(h); return `
     <div class="hist-item">
       <div class="hist-info">
-        <strong>${h.cliente}</strong>
+        <strong>${escapeHTML(h.cliente)}</strong>
         <span>${fmtDate(h.emitido)||'—'} · ${h.data.items.length} item(ns)</span>
         <span class="hist-badge">Válido até ${fmtDate(h.data.valido)||'—'}</span>
       </div>
@@ -755,11 +764,9 @@ function loadDataIntoForm(data) {
 }
 
 // ── DELETE ENTRY ──
-function deleteEntry(id) {
-  if (!confirm('Remover este orçamento do histórico?')) return;
-  const history = getHistory().filter(h => h.id !== id);
-  localStorage.setItem('orcamentos_cdl', JSON.stringify(history));
-  renderHistory();
+async function deleteEntry(id) {
+ if(!confirm('Remover este orçamento do histórico em todos os dispositivos?'))return;
+ try{await api('DELETE',{id});await refreshHistory();}catch(e){alert(e.message);}
 }
 
 // ── SAVE PDF ──
@@ -865,6 +872,7 @@ async function savePDFFromModal() {
 // ── RESET FORM ──
 function resetForm() {
   editingId = null;
+  pendingEntryId = null;
   document.getElementById('btn-generate').textContent = '✦ Gerar Orçamento';
   document.getElementById('cliente').value='';
   document.getElementById('contato').value='';
@@ -894,6 +902,8 @@ document.getElementById('valido').value = getBrasiliaDateISO(30);
 addItem('1','Assento + encosto modelo do projeto. (5cm assento)','945');
 loadHistFilters();
 initHistFilterUI();
+api('POST',{action:'session'}).then(enterApp).catch(()=>{});
+window.addEventListener('focus',()=>{if(document.getElementById('app').style.display!=='none')refreshHistory();});
 </script>
 </body>
 </html>
