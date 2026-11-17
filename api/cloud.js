@@ -14,7 +14,7 @@ module.exports = async (req, res) => {
   if (req.method === 'POST' && body.action === 'login') {
     // Persistent rate limiting is enforced by the storage function.
     let check; try { check = await fetch(process.env.STORE_URL, {method:'POST',headers:{'Authorization':`Bearer ${process.env.STORE_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({action:'attempt',ip:String(req.headers['x-vercel-forwarded-for'] || req.headers['x-forwarded-for'] || 'unknown').split(',')[0]})});
-    } catch { return reply(503,{error:'Não foi possível conectar. Tente novamente.'}); }
+    } catch (e) { console.error('Storage login unavailable',e.message,e.cause?.code); return reply(503,{error:'Não foi possível conectar. Tente novamente.'}); }
     if (!check.ok) return reply(check.status,{error:check.status === 429 ? 'Muitas tentativas. Aguarde 15 minutos.' : 'Não foi possível conectar. Tente novamente.'});
     if (typeof body.password !== 'string' || !equal(body.password, process.env.APP_PASSWORD)) return reply(401,{error:'Senha incorreta.'});
     const expires = String(Date.now() + 30*86400000);
